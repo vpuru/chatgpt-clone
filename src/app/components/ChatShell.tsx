@@ -141,6 +141,70 @@ export default function ChatShell() {
     if (!res.ok) {
       throw new Error("Failed to send message.");
     }
+
+    // Process SSE stream
+    const reader = res.body?.getReader();
+    const decoder = new TextDecoder();
+
+    if (!reader) {
+      throw new Error("No response body");
+    }
+
+    let assistantMessageId: string | null = null;
+    let buffer = "";
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const data = line.slice(6);
+            try {
+              const event = JSON.parse(data);
+
+              if (event.type === "message.created") {
+                // Add assistant placeholder
+                assistantMessageId = event.assistantMessage.id;
+                setMessages((prev) => [
+                  ...prev,
+                  {
+                    id: assistantMessageId!,
+                    role: "assistant",
+                    content: "",
+                  },
+                ]);
+              } else if (event.type === "message.delta" && assistantMessageId) {
+                // Append token to assistant message
+                setMessages((prev) =>
+                  prev.map((msg) =>
+                    msg.id === assistantMessageId
+                      ? { ...msg, content: msg.content + event.delta }
+                      : msg
+                  )
+                );
+              } else if (event.type === "message.done") {
+                // Streaming complete
+                break;
+              } else if (event.type === "message.error" || event.type === "message.cancelled") {
+                // Handle error/cancellation
+                console.error("Stream error:", event);
+                throw new Error(event.errorMessage || "Stream failed");
+              }
+            } catch (parseError) {
+              console.error("Failed to parse SSE event:", parseError);
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {

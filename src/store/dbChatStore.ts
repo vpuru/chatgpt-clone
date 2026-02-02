@@ -1,7 +1,7 @@
-import { desc, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { sessions } from "../db/schema";
+import { messages, sessions } from "../db/schema";
 import type { MessageRow, MessageStatus, SessionRow } from "../db/types";
 import type { ChatStore, CreateSendResult } from "./chatStore";
 
@@ -60,8 +60,34 @@ export class DbChatStore implements ChatStore {
     sessionId: string,
     opts?: { finalizeStaleStreaming?: boolean; staleThresholdMs?: number },
   ): Promise<MessageRow[]> {
-    // TODO: implement database-backed message retrieval.
-    throw new Error("DbChatStore.getMessages not implemented");
+    const thresholdMs = opts?.staleThresholdMs ?? 5 * 60 * 1000; // 5 minutes default
+    const staleThreshold = new Date(Date.now() - thresholdMs);
+
+    // First, optionally finalize stale streaming messages
+    if (opts?.finalizeStaleStreaming) {
+      await db
+        .update(messages)
+        .set({
+          status: "error",
+          errorCode: "STREAM_INTERRUPTED",
+          errorMessage: "Stream was interrupted and not finalized",
+          updatedAt: sql`NOW()`,
+        })
+        .where(
+          and(
+            eq(messages.sessionId, sessionId),
+            eq(messages.status, "streaming"),
+            sql`${messages.updatedAt} < ${staleThreshold}`,
+          ),
+        );
+    }
+
+    // Then retrieve all messages
+    return db
+      .select()
+      .from(messages)
+      .where(eq(messages.sessionId, sessionId))
+      .orderBy(messages.seq);
   }
 
   async createUserAndAssistantPlaceholder(params: {
@@ -69,18 +95,113 @@ export class DbChatStore implements ChatStore {
     content: string;
     clientMessageId: string;
   }): Promise<CreateSendResult> {
-    // TODO: implement database-backed user/assistant placeholder creation.
-    throw new Error(
-      "DbChatStore.createUserAndAssistantPlaceholder not implemented",
-    );
+    return await db.transaction(async (tx) => {
+      // Step 1: Check for existing user message with this clientMessageId (idempotency)
+      const [existingUserMessage] = await tx
+        .select()
+        .from(messages)
+        .where(
+          and(
+            eq(messages.sessionId, params.sessionId),
+            eq(messages.clientMessageId, params.clientMessageId),
+          ),
+        )
+        .limit(1);
+
+      if (existingUserMessage) {
+        // Idempotent case: message already exists
+        // Find the corresponding assistant message (if any)
+        const [assistantMessage] = await tx
+          .select()
+          .from(messages)
+          .where(
+            and(
+              eq(messages.sessionId, params.sessionId),
+              eq(messages.seq, existingUserMessage.seq + 1),
+              eq(messages.role, "assistant"),
+            ),
+          )
+          .limit(1);
+
+        return {
+          kind: "idempotent",
+          userMessageId: existingUserMessage.id,
+          userSeq: existingUserMessage.seq,
+          assistantMessageId: assistantMessage?.id ?? null,
+          assistantSeq: assistantMessage?.seq ?? null,
+        };
+      }
+
+      // Step 2: Lock the session row and get next_seq using SELECT FOR UPDATE
+      const [sessionLock] = await tx
+        .select({ nextSeq: sessions.nextSeq })
+        .from(sessions)
+        .where(eq(sessions.id, params.sessionId))
+        .for("update");
+
+      if (!sessionLock) {
+        throw new Error(`Session ${params.sessionId} not found`);
+      }
+
+      const userSeq = sessionLock.nextSeq;
+      const assistantSeq = userSeq + 1;
+      const newNextSeq = assistantSeq + 1;
+
+      // Step 3: Insert user message with status='complete'
+      const [userMessage] = await tx
+        .insert(messages)
+        .values({
+          sessionId: params.sessionId,
+          seq: userSeq,
+          role: "user",
+          status: "complete",
+          content: params.content,
+          clientMessageId: params.clientMessageId,
+        })
+        .returning({ id: messages.id });
+
+      // Step 4: Insert assistant placeholder with status='streaming', content=''
+      const [assistantMessage] = await tx
+        .insert(messages)
+        .values({
+          sessionId: params.sessionId,
+          seq: assistantSeq,
+          role: "assistant",
+          status: "streaming",
+          content: "",
+        })
+        .returning({ id: messages.id });
+
+      // Step 5: Update session's next_seq and last_activity_at
+      await tx
+        .update(sessions)
+        .set({
+          nextSeq: newNextSeq,
+          lastActivityAt: sql`NOW()`,
+        })
+        .where(eq(sessions.id, params.sessionId));
+
+      return {
+        kind: "created",
+        userMessageId: userMessage.id,
+        userSeq,
+        assistantMessageId: assistantMessage.id,
+        assistantSeq,
+      };
+    });
   }
 
   async flushAssistantContent(params: {
     assistantMessageId: string;
     content: string;
   }): Promise<void> {
-    // TODO: implement database-backed assistant content flushing.
-    throw new Error("DbChatStore.flushAssistantContent not implemented");
+    await db
+      .update(messages)
+      .set({
+        content: params.content,
+        updatedAt: sql`NOW()`,
+      })
+      .where(eq(messages.id, params.assistantMessageId));
   }
 
   async finalizeAssistant(params: {
@@ -90,8 +211,16 @@ export class DbChatStore implements ChatStore {
     errorCode?: string | null;
     errorMessage?: string | null;
   }): Promise<void> {
-    // TODO: implement database-backed assistant finalization.
-    throw new Error("DbChatStore.finalizeAssistant not implemented");
+    await db
+      .update(messages)
+      .set({
+        status: params.status,
+        content: params.content,
+        errorCode: params.errorCode ?? null,
+        errorMessage: params.errorMessage ?? null,
+        updatedAt: sql`NOW()`,
+      })
+      .where(eq(messages.id, params.assistantMessageId));
   }
 
   async bumpSessionActivity(sessionId: string): Promise<void> {
