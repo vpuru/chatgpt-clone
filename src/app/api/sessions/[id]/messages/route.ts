@@ -224,6 +224,19 @@ export async function POST(request: Request, context: RouteContext) {
           });
 
           sendEvent(doneEvent(assistantMessageId));
+
+          // Generate title for first message (seq starts at 1)
+          if (createResult.userSeq === 1) {
+            try {
+              const generatedTitle = await llm.generateTitle({
+                firstUserMessage: body.content.trim(),
+              });
+              await store.renameSession(sessionId, generatedTitle);
+            } catch (titleError) {
+              console.error("Failed to generate/update title:", titleError);
+              // Don't fail the request if title generation fails
+            }
+          }
         } catch (error: any) {
           if (error.name === "AbortError") {
             // Client aborted - finalize as cancelled

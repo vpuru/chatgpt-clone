@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { DbChatStore } from "@/store/DbChatStore";
 
 const notImplementedResponse = () =>
   NextResponse.json(
@@ -10,6 +11,10 @@ const notImplementedResponse = () =>
     { status: 501 }
   );
 
+type RouteContext = {
+  params: { id: string };
+};
+
 /**
  * Session detail routes.
  *
@@ -20,8 +25,55 @@ const notImplementedResponse = () =>
  * Expected response shape:
  * { "id": "uuid", "title": "My new title", "lastActivityAt": "..." }
  */
-export async function PATCH() {
-  return notImplementedResponse();
+export async function PATCH(request: Request, context: RouteContext) {
+  const sessionId = context.params.id;
+  const store = new DbChatStore();
+
+  // Parse and validate request
+  let body: { title?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      { error: "BAD_REQUEST", message: "Invalid JSON body" },
+      { status: 400 }
+    );
+  }
+
+  if (!body.title?.trim()) {
+    return NextResponse.json(
+      { error: "BAD_REQUEST", message: "title is required" },
+      { status: 400 }
+    );
+  }
+
+  // Update session title
+  try {
+    await store.renameSession(sessionId, body.title);
+
+    // Fetch updated session to return
+    const sessions = await store.listSessions();
+    const updatedSession = sessions.find((s) => s.id === sessionId);
+
+    if (!updatedSession) {
+      return NextResponse.json(
+        { error: "NOT_FOUND", message: "Session not found" },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      id: updatedSession.id,
+      title: updatedSession.title,
+      lastActivityAt: updatedSession.lastActivityAt,
+    });
+  } catch (error: any) {
+    console.error("Failed to rename session:", error);
+    return NextResponse.json(
+      { error: "DB_WRITE_FAILED", message: "Failed to rename session" },
+      { status: 500 }
+    );
+  }
 }
 
 /**

@@ -47,8 +47,13 @@ export class DbChatStore implements ChatStore {
   }
 
   async renameSession(sessionId: string, title: string): Promise<void> {
-    // TODO: implement database-backed session rename.
-    throw new Error("DbChatStore.renameSession not implemented");
+    await db
+      .update(sessions)
+      .set({
+        title: title.trim(),
+        lastActivityAt: sql`NOW()`,
+      })
+      .where(eq(sessions.id, sessionId));
   }
 
   async deleteSession(sessionId: string): Promise<void> {
