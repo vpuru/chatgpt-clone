@@ -47,17 +47,31 @@ export default function ChatShell() {
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const fetchSessions = async () => {
+    const res = await fetch("/api/sessions");
+    if (!res.ok) {
+      throw new Error("Failed to load sessions.");
+    }
+    const data = (await res.json()) as SessionsResponse;
+    return data.sessions ?? [];
+  };
+
+  const refreshSessions = async () => {
+    try {
+      const nextSessions = await fetchSessions();
+      setSessions(nextSessions);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load data.");
+    }
+  };
+
   useEffect(() => {
     let isMounted = true;
     const loadSessions = async () => {
       try {
-        const res = await fetch("/api/sessions");
-        if (!res.ok) {
-          throw new Error("Failed to load sessions.");
-        }
-        const data = (await res.json()) as SessionsResponse;
+        const nextSessions = await fetchSessions();
         if (isMounted) {
-          setSessions(data.sessions ?? []);
+          setSessions(nextSessions);
         }
       } catch (err) {
         if (isMounted) {
@@ -163,6 +177,7 @@ export default function ChatShell() {
           throw new Error("Failed to start a new session.");
         }
         const data = (await res.json()) as SessionListItem;
+        await refreshSessions();
         await sendMessage(data.id, trimmed);
         router.push(`/sessions/${data.id}`);
         return;
