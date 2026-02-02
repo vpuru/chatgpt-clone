@@ -1,16 +1,6 @@
 import { NextResponse } from "next/server";
 import { DbChatStore } from "@/store/dbChatStore";
 
-const notImplementedResponse = () =>
-  NextResponse.json(
-    {
-      error: "not_implemented",
-      message:
-        "This endpoint is specified but not implemented yet. Refer to SPEC.md for the contract.",
-    },
-    { status: 501 }
-  );
-
 /**
  * Sessions collection routes.
  *
@@ -51,6 +41,12 @@ export async function GET() {
  * { "id": "uuid", "title": "New chat", "createdAt": "...", "lastActivityAt": "..." }
  * Notes: title can remain "New chat" until first message triggers auto-title.
  */
-export async function POST() {
-  return notImplementedResponse();
+export async function POST(request: Request) {
+  const payload = (await request.json().catch(() => ({}))) as {
+    title?: string | null;
+  };
+  const store = new DbChatStore();
+  const session = await store.createSession({ title: payload.title });
+
+  return NextResponse.json(session);
 }
