@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
 type SessionListItem = {
@@ -46,6 +46,8 @@ export default function ChatShell() {
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const fetchSessions = async () => {
     const res = await fetch("/api/sessions");
@@ -255,11 +257,23 @@ export default function ChatShell() {
     }
   };
 
+  // Restore focus after sending
+  useEffect(() => {
+    if (!isSending) {
+      inputRef.current?.focus();
+    }
+  }, [isSending]);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
   return (
-    <main className="flex min-h-screen bg-white text-slate-900">
-      <aside className="w-64 border-r border-slate-200 bg-slate-50 p-4">
+    <main className="flex h-screen bg-white text-slate-900">
+      <aside className="w-64 border-r border-slate-200 bg-slate-50 p-4 flex flex-col">
         <div className="text-sm font-semibold text-slate-700">Conversations</div>
-        <div className="mt-3 space-y-1">
+        <div className="mt-3 space-y-1 overflow-y-auto flex-1">
           {orderedSessions.length === 0 ? (
             <p className="text-xs text-slate-500">No sessions yet.</p>
           ) : (
@@ -279,8 +293,8 @@ export default function ChatShell() {
           )}
         </div>
       </aside>
-      <section className="flex flex-1 flex-col">
-        <header className="border-b border-slate-200 px-6 py-4">
+      <section className="flex flex-1 flex-col h-full">
+        <header className="border-b border-slate-200 px-6 py-4 flex-shrink-0">
           <h1 className="text-lg font-semibold">
             {sessionId ? "Chat" : "Start a new chat"}
           </h1>
@@ -290,38 +304,42 @@ export default function ChatShell() {
               : "Type a message to create a new session."}
           </p>
         </header>
-        <div className="flex-1 space-y-4 overflow-y-auto px-6 py-6">
-          {messages.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-slate-200 p-6 text-sm text-slate-500">
-              No messages yet.
-            </div>
-          ) : (
-            messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${
-                  message.role === "user" ? "justify-end" : "justify-start"
-                }`}
-              >
+        <div className="flex-1 overflow-y-auto px-6 py-6">
+          <div className="space-y-4">
+            {messages.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-200 p-6 text-sm text-slate-500">
+                No messages yet.
+              </div>
+            ) : (
+              messages.map((message) => (
                 <div
-                  className={`max-w-lg rounded-2xl px-4 py-2 text-sm shadow-sm ${
-                    message.role === "user"
-                      ? "bg-slate-900 text-white"
-                      : "bg-slate-100 text-slate-900"
+                  key={message.id}
+                  className={`flex ${
+                    message.role === "user" ? "justify-end" : "justify-start"
                   }`}
                 >
-                  {message.content}
+                  <div
+                    className={`max-w-lg rounded-2xl px-4 py-2 text-sm shadow-sm ${
+                      message.role === "user"
+                        ? "bg-slate-900 text-white"
+                        : "bg-slate-100 text-slate-900"
+                    }`}
+                  >
+                    {message.content}
+                  </div>
                 </div>
-              </div>
-            ))
-          )}
+              ))
+            )}
+            <div ref={messagesEndRef} />
+          </div>
         </div>
         <form
           onSubmit={handleSubmit}
-          className="border-t border-slate-200 px-6 py-4"
+          className="border-t border-slate-200 px-6 py-4 flex-shrink-0"
         >
           <div className="flex items-center gap-3">
             <input
+              ref={inputRef}
               value={input}
               onChange={(event) => setInput(event.target.value)}
               placeholder="Send a message..."
