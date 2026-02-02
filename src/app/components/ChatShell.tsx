@@ -250,6 +250,7 @@ export default function ChatShell() {
       }
 
       await sendMessage(sessionId, trimmed);
+      await refreshSessions(); // Refresh to get updated title after first message
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to send message.");
     } finally {
