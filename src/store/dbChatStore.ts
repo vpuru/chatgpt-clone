@@ -1,12 +1,29 @@
+import { desc, isNull } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
+import { sessions } from "../db/schema";
 import type { MessageRow, MessageStatus, SessionRow } from "../db/types";
 import type { ChatStore, CreateSendResult } from "./chatStore";
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+const db = drizzle(pool);
 
 export class DbChatStore implements ChatStore {
   async listSessions(): Promise<
     Array<Pick<SessionRow, "id" | "title" | "createdAt" | "lastActivityAt">>
   > {
-    // TODO: implement database-backed session listing.
-    throw new Error("DbChatStore.listSessions not implemented");
+    return db
+      .select({
+        id: sessions.id,
+        title: sessions.title,
+        createdAt: sessions.createdAt,
+        lastActivityAt: sessions.lastActivityAt,
+      })
+      .from(sessions)
+      .where(isNull(sessions.deletedAt))
+      .orderBy(desc(sessions.lastActivityAt));
   }
 
   async createSession(input?: {
