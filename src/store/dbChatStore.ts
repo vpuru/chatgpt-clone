@@ -29,8 +29,21 @@ export class DbChatStore implements ChatStore {
   async createSession(input?: {
     title?: string | null;
   }): Promise<Pick<SessionRow, "id" | "title" | "createdAt" | "lastActivityAt">> {
-    // TODO: implement database-backed session creation.
-    throw new Error("DbChatStore.createSession not implemented");
+    const rawTitle = input?.title;
+    const normalizedTitle = rawTitle?.trim();
+    const title = normalizedTitle ? normalizedTitle : "New chat";
+
+    const [session] = await db
+      .insert(sessions)
+      .values({ title })
+      .returning({
+        id: sessions.id,
+        title: sessions.title,
+        createdAt: sessions.createdAt,
+        lastActivityAt: sessions.lastActivityAt,
+      });
+
+    return session;
   }
 
   async renameSession(sessionId: string, title: string): Promise<void> {
