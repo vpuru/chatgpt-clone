@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { DbChatStore } from "@/store/DbChatStore";
 import { toMessageDTO, type CreateMessageRequest } from "@/api/dtos";
-import { OllamaClient } from "@/llm/ollama";
+import { llmClient } from "@/llm/client";
 import {
   createdEvent,
   deltaEvent,
@@ -190,7 +190,7 @@ export async function POST(request: Request, context: RouteContext) {
           }));
 
         // Step 4c: Stream LLM response
-        const llm = new OllamaClient();
+        const llm = llmClient;
         const abortController = new AbortController();
 
         // Handle client disconnect
