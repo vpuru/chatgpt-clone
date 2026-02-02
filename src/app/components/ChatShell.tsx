@@ -130,6 +130,11 @@ export default function ChatShell() {
 
   const orderedSessions = useMemo(() => sessions, [sessions]);
 
+  const currentSession = useMemo(() => {
+    if (!sessionId) return null;
+    return sessions.find((s) => s.id === sessionId) || null;
+  }, [sessions, sessionId]);
+
   const sendMessage = async (targetSessionId: string, content: string) => {
     const clientMessageId = crypto.randomUUID();
     const res = await fetch(`/api/sessions/${targetSessionId}/messages`, {
@@ -273,6 +278,26 @@ export default function ChatShell() {
   return (
     <main className="flex h-screen bg-white text-slate-900">
       <aside className="w-64 border-r border-slate-200 bg-slate-50 p-4 flex flex-col">
+        <Link
+          href="/"
+          className="flex items-center gap-2 mb-4 rounded-lg px-2 py-2 hover:bg-slate-100 transition-colors text-slate-700"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={1.5}
+            stroke="currentColor"
+            className="w-5 h-5"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"
+            />
+          </svg>
+          <span className="text-sm font-medium">Home</span>
+        </Link>
         <div className="text-sm font-semibold text-slate-700">Conversations</div>
         <div className="mt-3 space-y-1 overflow-y-auto flex-1">
           {orderedSessions.length === 0 ? (
@@ -297,13 +322,13 @@ export default function ChatShell() {
       <section className="flex flex-1 flex-col h-full">
         <header className="border-b border-slate-200 px-6 py-4 flex-shrink-0">
           <h1 className="text-lg font-semibold">
-            {sessionId ? "Chat" : "Start a new chat"}
+            {currentSession?.title || (sessionId ? "Chat" : "Start a new chat")}
           </h1>
-          <p className="text-sm text-slate-500">
-            {sessionId
-              ? "Messages will stream here once the backend is wired up."
-              : "Type a message to create a new session."}
-          </p>
+          {!sessionId && (
+            <p className="text-sm text-slate-500">
+              Type a message to create a new session.
+            </p>
+          )}
         </header>
         <div className="flex-1 overflow-y-auto px-6 py-6">
           <div className="space-y-4">
