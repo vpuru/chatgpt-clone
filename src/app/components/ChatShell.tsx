@@ -48,6 +48,7 @@ export default function ChatShell() {
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const fetchSessions = async () => {
     const res = await fetch("/api/sessions");
@@ -135,7 +136,8 @@ export default function ChatShell() {
     return sessions.find((s) => s.id === sessionId) || null;
   }, [sessions, sessionId]);
 
-  const sendMessage = async (targetSessionId: string, content: string) => {
+  const sendMessage = async (targetSessionId: string, content: string, abortController: AbortController) => {
+    abortControllerRef.current = abortController;
     const clientMessageId = crypto.randomUUID();
     const res = await fetch(`/api/sessions/${targetSessionId}/messages`, {
       method: "POST",
@@ -143,6 +145,7 @@ export default function ChatShell() {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ content, clientMessageId }),
+      signal: abortController.signal,
     });
 
     if (!res.ok) {
@@ -198,8 +201,11 @@ export default function ChatShell() {
               } else if (event.type === "message.done") {
                 // Streaming complete
                 break;
-              } else if (event.type === "message.error" || event.type === "message.cancelled") {
-                // Handle error/cancellation
+              } else if (event.type === "message.cancelled") {
+                // User cancelled - exit gracefully
+                break;
+              } else if (event.type === "message.error") {
+                // Handle error
                 console.error("Stream error:", event);
                 throw new Error(event.errorMessage || "Stream failed");
               }
@@ -228,6 +234,8 @@ export default function ChatShell() {
     setIsSending(true);
     setInput("");
 
+    const abortController = new AbortController();
+
     const optimisticMessage: MessageItem = {
       id: crypto.randomUUID(),
       role: "user",
@@ -249,17 +257,29 @@ export default function ChatShell() {
         }
         const data = (await res.json()) as SessionListItem;
         await refreshSessions();
-        await sendMessage(data.id, trimmed);
+        await sendMessage(data.id, trimmed, abortController);
         router.push(`/sessions/${data.id}`);
         return;
       }
 
-      await sendMessage(sessionId, trimmed);
+      await sendMessage(sessionId, trimmed, abortController);
       await refreshSessions(); // Refresh to get updated title after first message
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to send message.");
+      // Handle abort silently (user-initiated, not an error)
+      if (err instanceof Error && err.name === 'AbortError') {
+        setError(null);
+      } else {
+        setError(err instanceof Error ? err.message : "Unable to send message.");
+      }
     } finally {
+      abortControllerRef.current = null;
       setIsSending(false);
+    }
+  };
+
+  const handleAbort = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
   };
 
@@ -274,6 +294,15 @@ export default function ChatShell() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Cleanup: abort any in-flight requests on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   return (
     <main className="flex h-screen bg-white text-slate-900">
@@ -372,13 +401,37 @@ export default function ChatShell() {
               className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-400 focus:outline-none"
               disabled={isSending}
             />
-            <button
-              type="submit"
-              disabled={isSending || input.trim().length === 0}
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
-            >
-              Send
-            </button>
+            {isSending ? (
+              <button
+                type="button"
+                onClick={handleAbort}
+                className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 transition-colors"
+                aria-label="Stop generating"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                  className="w-4 h-4"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z"
+                  />
+                </svg>
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={input.trim().length === 0}
+                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                Send
+              </button>
+            )}
           </div>
           {error ? (
             <p className="mt-2 text-xs text-rose-500">{error}</p>
