@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { DbChatStore } from "@/store/dbChatStore";
 
 const notImplementedResponse = () =>
   NextResponse.json(
@@ -30,7 +31,15 @@ const notImplementedResponse = () =>
  * Notes: sort by lastActivityAt DESC; exclude soft-deleted sessions by default.
  */
 export async function GET() {
-  return notImplementedResponse();
+  const store = new DbChatStore();
+  const sessions = await store.listSessions();
+
+  return NextResponse.json({
+    sessions: sessions.map((session) => ({
+      ...session,
+      isDeleted: false,
+    })),
+  });
 }
 
 /**
