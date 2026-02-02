@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { DbChatStore } from "../../../store/dbChatStore";
 
 const notImplementedResponse = () =>
   NextResponse.json(
@@ -42,6 +43,24 @@ export async function GET() {
  * { "id": "uuid", "title": "New chat", "createdAt": "...", "lastActivityAt": "..." }
  * Notes: title can remain "New chat" until first message triggers auto-title.
  */
-export async function POST() {
-  return notImplementedResponse();
+export async function POST(request: Request) {
+  let payload: { title?: string | null } = {};
+  try {
+    const body = await request.json();
+    if (body && typeof body !== "object") {
+      return NextResponse.json(
+        { error: "invalid_body", message: "Expected JSON object payload." },
+        { status: 400 },
+      );
+    }
+    payload = body ?? {};
+  } catch {
+    return NextResponse.json(
+      { error: "invalid_json", message: "Request body must be valid JSON." },
+      { status: 400 },
+    );
+  }
+  const store = new DbChatStore();
+  const session = await store.createSession(payload);
+  return NextResponse.json(session, { status: 201 });
 }

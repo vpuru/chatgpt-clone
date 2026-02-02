@@ -1,5 +1,25 @@
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
+import { sessions } from "../db/schema";
 import type { MessageRow, MessageStatus, SessionRow } from "../db/types";
 import type { ChatStore, CreateSendResult } from "./chatStore";
+
+const globalForDb = globalThis as typeof globalThis & {
+  pgPool?: Pool;
+  drizzleDb?: ReturnType<typeof drizzle>;
+};
+
+const getDb = () => {
+  if (!globalForDb.drizzleDb) {
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) {
+      throw new Error("DATABASE_URL is not configured");
+    }
+    globalForDb.pgPool ??= new Pool({ connectionString });
+    globalForDb.drizzleDb = drizzle(globalForDb.pgPool);
+  }
+  return globalForDb.drizzleDb;
+};
 
 export class DbChatStore implements ChatStore {
   async listSessions(): Promise<
@@ -12,8 +32,21 @@ export class DbChatStore implements ChatStore {
   async createSession(input?: {
     title?: string | null;
   }): Promise<Pick<SessionRow, "id" | "title" | "createdAt" | "lastActivityAt">> {
-    // TODO: implement database-backed session creation.
-    throw new Error("DbChatStore.createSession not implemented");
+    const normalizedTitle = (input?.title ?? "").trim();
+    const title = normalizedTitle.length > 0 ? normalizedTitle : "New chat";
+    const [session] = await getDb()
+      .insert(sessions)
+      .values({ title })
+      .returning({
+        id: sessions.id,
+        title: sessions.title,
+        createdAt: sessions.createdAt,
+        lastActivityAt: sessions.lastActivityAt,
+      });
+    if (!session) {
+      throw new Error("Failed to create session");
+    }
+    return session;
   }
 
   async renameSession(sessionId: string, title: string): Promise<void> {
