@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import SessionItem from "./SessionItem";
 
 type SessionListItem = {
   id: string;
@@ -30,13 +31,6 @@ type SessionsResponse = {
   sessions: SessionListItem[];
 };
 
-const truncateTitle = (title: string | null) => {
-  if (!title || title.trim().length === 0) {
-    return "New chat";
-  }
-  return title.length > 28 ? `${title.slice(0, 28)}…` : title;
-};
-
 export default function ChatShell() {
   const params = useParams();
   const router = useRouter();
@@ -46,6 +40,8 @@ export default function ChatShell() {
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -283,6 +279,55 @@ export default function ChatShell() {
     }
   };
 
+  const handleRename = async (sessionId: string, newTitle: string) => {
+    setIsRenaming(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: newTitle.trim() }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to rename session");
+      }
+
+      await refreshSessions();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to rename session");
+      throw err; // Re-throw so SessionItem knows it failed
+    } finally {
+      setIsRenaming(false);
+    }
+  };
+
+  const handleDelete = async (sessionId: string) => {
+    setIsDeleting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to delete session");
+      }
+
+      // If deleting current session, navigate to home
+      if (sessionId === sessionId) {
+        router.push("/");
+      }
+
+      await refreshSessions();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete session");
+      throw err; // Re-throw so SessionItem knows it failed
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   // Restore focus after sending
   useEffect(() => {
     if (!isSending) {
@@ -333,17 +378,15 @@ export default function ChatShell() {
             <p className="text-xs text-slate-500">No sessions yet.</p>
           ) : (
             orderedSessions.map((session) => (
-              <Link
+              <SessionItem
                 key={session.id}
-                href={`/sessions/${session.id}`}
-                className={`block rounded-md px-2 py-1 text-sm ${
-                  session.id === sessionId
-                    ? "bg-slate-200 text-slate-900"
-                    : "text-slate-600 hover:bg-slate-100"
-                }`}
-              >
-                {truncateTitle(session.title)}
-              </Link>
+                session={session}
+                isActive={session.id === sessionId}
+                onRename={handleRename}
+                onDelete={handleDelete}
+                isRenaming={isRenaming}
+                isDeleting={isDeleting}
+              />
             ))
           )}
         </div>
