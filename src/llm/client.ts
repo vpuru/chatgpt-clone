@@ -1,4 +1,5 @@
 import { OllamaClient } from "./ollama";
+import { OpenAIClient } from "./openai";
 import type { LLMClient } from "./types";
 import { getLLMEnvironment } from "./env";
 
@@ -7,8 +8,10 @@ let cachedClient: LLMClient | null = null;
 function createLLMClient(): LLMClient {
   const env = getLLMEnvironment();
 
-  // For both development and production, use OllamaClient for now
-  // Future: Can add different implementations based on env
+  if (env === "production") {
+    return new OpenAIClient();
+  }
+
   return new OllamaClient();
 }
 

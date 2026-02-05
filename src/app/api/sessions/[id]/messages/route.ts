@@ -18,7 +18,7 @@ const notImplementedResponse = () =>
       message:
         "This endpoint is specified but not implemented yet. Refer to SPEC.md for the contract.",
     },
-    { status: 501 }
+    { status: 501 },
   );
 
 type RouteContext = {
@@ -226,7 +226,7 @@ export async function POST(request: Request, context: RouteContext) {
           sendEvent(doneEvent(assistantMessageId));
 
           // Generate title for first message (seq starts at 1)
-          if (createResult.userSeq === 1) {
+          if (createResult.userSeq === 1 && llm.generateTitle) {
             try {
               const generatedTitle = await llm.generateTitle({
                 firstUserMessage: body.content.trim(),
@@ -255,9 +255,7 @@ export async function POST(request: Request, context: RouteContext) {
               errorCode: "LLM_ERROR",
               errorMessage: error.message || "LLM request failed",
             });
-            sendEvent(
-              errorEvent(assistantMessageId, "LLM_ERROR", error.message),
-            );
+            sendEvent(errorEvent(assistantMessageId, "LLM_ERROR", error.message));
           }
         }
       } catch (error: any) {
@@ -274,9 +272,7 @@ export async function POST(request: Request, context: RouteContext) {
         } catch (finalizeError) {
           console.error("Failed to finalize on error:", finalizeError);
         }
-        sendEvent(
-          errorEvent(assistantMessageId, "STREAM_INTERRUPTED", error.message),
-        );
+        sendEvent(errorEvent(assistantMessageId, "STREAM_INTERRUPTED", error.message));
       } finally {
         controller.close();
       }
