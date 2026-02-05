@@ -91,15 +91,19 @@ export class OpenAIClient implements LLMClient {
     const prompt: ChatMessage[] = [
       {
         role: "system",
-        content: "Generate a short, descriptive title (max 6 words) for the conversation.",
+        content: "Generate a short, descriptive title (max 6 words) for the conversation. Only output the title, nothing else.",
       },
       { role: "user", content: params.firstUserMessage },
     ];
-    const result = await this.chatOnce(prompt, params.signal);
+    const result = await this.chatOnce(prompt, params.signal, { maxTokens: 20 });
     return result;
   }
 
-  private async chatOnce(messages: ChatMessage[], signal?: AbortSignal): Promise<string> {
+  private async chatOnce(
+    messages: ChatMessage[],
+    signal?: AbortSignal,
+    options?: { maxTokens?: number }
+  ): Promise<string> {
     const client = new OpenAI({ apiKey: this.apiKey });
 
     if (signal?.aborted) {
@@ -118,6 +122,7 @@ export class OpenAIClient implements LLMClient {
         model: this.model,
         input: messages.map(this.toOpenAIMessage),
         stream: true,
+        ...(options?.maxTokens != null ? { max_tokens: options.maxTokens } : {}),
       });
 
       let fullText = "";

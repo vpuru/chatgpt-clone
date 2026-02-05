@@ -103,16 +103,17 @@ export class OllamaClient implements LLMClient {
       {
         role: "system",
         content:
-          "Generate a short, descriptive title (max 6 words) for the conversation.",
+          "Generate a short, descriptive title (max 6 words) for the conversation. Only output the title, nothing else.",
       },
       { role: "user", content: params.firstUserMessage },
     ];
-    return this.chatOnce(prompt, params.signal);
+    return this.chatOnce(prompt, params.signal, { maxTokens: 20 });
   }
 
   private async chatOnce(
     messages: ChatMessage[],
     signal?: AbortSignal,
+    options?: { maxTokens?: number }
   ): Promise<string> {
     const client = new Ollama({ host: this.baseUrl });
     const onAbort = () => client.abort();
@@ -130,6 +131,9 @@ export class OllamaClient implements LLMClient {
         model: this.model,
         stream: false,
         messages: messages.map(this.toOllamaMessage),
+        options: {
+          ...(options?.maxTokens != null ? { num_predict: options.maxTokens } : {}),
+        },
       });
 
       return response.message?.content?.trim() ?? "";
