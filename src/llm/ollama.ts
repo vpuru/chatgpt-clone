@@ -13,7 +13,6 @@ type OllamaChatMessage = {
 
 const makeAbortError = (): Error => {
   try {
-    // @ts-expect-error - DOMException exists in many runtimes.
     return new DOMException("The operation was aborted.", "AbortError");
   } catch {
     const error = new Error("The operation was aborted.");

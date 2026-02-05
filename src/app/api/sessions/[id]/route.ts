@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { DbChatStore } from "@/store/DbChatStore";
+import { DbChatStore } from "@/store/dbChatStore";
 
 const notImplementedResponse = () =>
   NextResponse.json(

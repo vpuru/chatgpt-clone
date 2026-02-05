@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { DbChatStore } from "@/store/DbChatStore";
+import { DbChatStore } from "@/store/dbChatStore";
 import { toMessageDTO, type CreateMessageRequest } from "@/api/dtos";
 import { llmClient } from "@/llm/client";
 import {

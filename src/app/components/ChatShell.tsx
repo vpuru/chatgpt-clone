@@ -107,7 +107,7 @@ export default function ChatShell() {
             .filter((message) => message.role !== "system")
             .map((message) => ({
               id: message.id,
-              role: message.role === "assistant" ? "assistant" : "user",
+              role: (message.role === "assistant" ? "assistant" : "user") as "user" | "assistant",
               content: message.content,
             }));
           setMessages(mapped);
