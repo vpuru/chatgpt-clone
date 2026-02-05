@@ -57,8 +57,12 @@ export class DbChatStore implements ChatStore {
   }
 
   async deleteSession(sessionId: string): Promise<void> {
-    // TODO: implement database-backed session deletion.
-    throw new Error("DbChatStore.deleteSession not implemented");
+    await db
+      .update(sessions)
+      .set({
+        deletedAt: sql`NOW()`,
+      })
+      .where(eq(sessions.id, sessionId));
   }
 
   async getMessages(

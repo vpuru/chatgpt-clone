@@ -82,6 +82,18 @@ export async function PATCH(request: Request, context: RouteContext) {
  * Expected response: 204 No Content
  * Notes: soft delete sets deletedAt while keeping messages for restore/debugging.
  */
-export async function DELETE() {
-  return notImplementedResponse();
+export async function DELETE(request: Request, context: RouteContext) {
+  const sessionId = context.params.id;
+  const store = new DbChatStore();
+
+  try {
+    await store.deleteSession(sessionId);
+    return new NextResponse(null, { status: 204 });
+  } catch (error: any) {
+    console.error("Failed to delete session:", error);
+    return NextResponse.json(
+      { error: "DB_WRITE_FAILED", message: "Failed to delete session" },
+      { status: 500 }
+    );
+  }
 }
