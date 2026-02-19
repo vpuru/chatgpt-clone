@@ -1,5 +1,5 @@
 import { useRef, useEffect, memo } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import ChatInput from '../components/ChatInput'
 import { useChat, type Message } from '../hooks/useChat'
 
@@ -49,13 +49,18 @@ export default function Conversation() {
   const { messages, streamingContent, status, sendMessage, abort } = useChat()
   const bottomRef = useRef<HTMLDivElement>(null)
   const location = useLocation()
+  const navigate = useNavigate()
   const sentRef = useRef(false)
 
   useEffect(() => {
     const initial = (location.state as { initialMessage?: string } | null)?.initialMessage
     if (initial && !sentRef.current) {
       sentRef.current = true
+      // Clear router state so refresh/back-forward navigation doesn't re-send
+      navigate('/conversation', { replace: true, state: {} })
       sendMessage(initial)
+    } else if (!initial) {
+      navigate('/', { replace: true })
     }
   }, []) // intentional empty deps — fire once on mount
 
