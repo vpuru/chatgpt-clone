@@ -7,7 +7,7 @@ from services.openai import stream_chat
 router = APIRouter()
 
 
-@router.post("/v1/chat")
+@router.post("/api/v1/chat")
 async def chat(request: ChatRequest):
     try:
         return StreamingResponse(stream_chat(request), media_type="text/event-stream")
